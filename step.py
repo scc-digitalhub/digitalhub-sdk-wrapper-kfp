@@ -60,50 +60,6 @@ def _is_complete(state: str) -> bool:
     return state == State.COMPLETED.value
 
 
-def execute_step(exec_entity: ExecutableEntity, exec_kwargs: dict) -> None:
-    """
-    Execute a step by running the provided executable entity with the given arguments.
-    Waits for the execution to finish, writes the run ID to an output file,
-    and processes and writes any output entities if the run completes successfully.
-
-    Parameters
-    ----------
-    exec_entity : ExecutableEntity
-        The executable entity to run (function or workflow).
-    exec_kwargs : dict
-        The keyword arguments to pass to the entity's run method.
-
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    - Waits for the run to reach a finished state, polling every 5 seconds.
-    - Writes the run ID to an output file named "run_id".
-    - If the run completes successfully, writes output entities to files.
-    - Logs all major steps and warnings for failures.
-    - Exits with code 1 if the run fails.
-    """
-    LOGGER.info(f"Executing {exec_entity.ENTITY_TYPE} task {exec_kwargs['action']}")
-    run = exec_entity.run(**exec_kwargs)
-
-    _poller(run)
-
-    # Write run_id to output file
-    try:
-        _write_output("run_id", run.id)
-    except Exception as e:
-        LOGGER.info(f"Failed writing run_id to temp file. Ignoring ({repr(e)})")
-
-    # Process outputs
-    _check_complete(run)
-    LOGGER.info("Step completed: " + run.status.state)
-
-    _export_outputs(run)
-    LOGGER.info("Done.")
-
-
 def _poller(run: Run) -> None:
     """
     Poll a run until it reaches a finished state.
@@ -125,6 +81,30 @@ def _poller(run: Run) -> None:
         time.sleep(5)
         run = run.refresh()
         LOGGER.info("Step state: " + run.status.state)
+
+
+def _write_run_id(run: Run) -> None:
+    """
+    Write the run ID to an output file named "run_id".
+
+    Parameters
+    ----------
+    run : Run
+        The run to write.
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    Prevents path traversal attacks by validating the output path.
+    Logs warnings if writing fails or if the path is unsafe.
+    """
+    try:
+        _write_output("run_id", run.id)
+    except Exception as e:
+        LOGGER.info(f"Failed writing run_id to temp file. Ignoring ({repr(e)})")
 
 
 def _check_complete(run: Run) -> None:
@@ -285,10 +265,7 @@ def _parse_exec_entity(args: argparse.Namespace) -> ExecutableEntity:
 def _parse_exec_kwargs(args: argparse.Namespace) -> dict:
     """
     Parse execution keyword arguments from argparse arguments.
-
-    This function collects action, inputs, parameters, outputs, and any additional
-    properties provided as JSON. It supports multiple input/output/parameter
-    arguments via repeated CLI flags.
+    This function collects action and execkwargs.
 
     Parameters
     ----------
@@ -299,55 +276,55 @@ def _parse_exec_kwargs(args: argparse.Namespace) -> dict:
     -------
     dict
         Dictionary of keyword arguments to be passed to the executable entity.
-
-    Notes
-    -----
-    - The function expects CLI flags: -ie (inputs), -iv (parameters), -oe (outputs).
-    - Additional properties can be passed as a JSON string via --jsonprops.
-    - Later keys in --jsonprops will override previous ones if duplicated.
     """
     exec_kwargs = {"action": args.action}
-
-    # Map CLI flags to exec_kwargs keys
-    flag_map = [("ie", "inputs"), ("iv", "parameters"), ("oe", "outputs")]
-    for cli_attr, kwarg_key in flag_map:
-        props = _parse_properties(getattr(args, cli_attr, None))
-        if props:
-            exec_kwargs[kwarg_key] = props
-
-    # Merge additional properties from JSON, if provided
-    if getattr(args, "jsonprops", None):
+    if getattr(args, "execkwargs", None):
         try:
-            exec_kwargs.update(json.loads(args.jsonprops))
+            exec_kwargs.update(json.loads(args.execkwargs))
         except Exception as e:
-            LOGGER.info(f"Failed to parse jsonprops: {e}")
-
+            LOGGER.info(f"Failed to parse execkwargs: {e}")
     return exec_kwargs
 
 
-def _parse_properties(str_list: list[str] | None) -> dict:
+def execute_step(exec_entity: ExecutableEntity, exec_kwargs: dict) -> None:
     """
-    Parse a list of key=value strings into a dictionary.
+    Execute a step by running the provided executable entity with the given arguments.
+    Waits for the execution to finish, writes the run ID to an output file,
+    and processes and writes any output entities if the run completes successfully.
 
     Parameters
     ----------
-    str_list : list[str] or None
-        List of strings in the form key=value.
+    exec_entity : ExecutableEntity
+        The executable entity to run (function or workflow).
+    exec_kwargs : dict
+        The keyword arguments to pass to the entity's run method.
 
     Returns
     -------
-    dict
-        Dictionary of parsed key-value pairs. Returns empty dict if input is None.
+    None
+
+    Notes
+    -----
+    - Waits for the run to reach a finished state, polling every 5 seconds.
+    - Writes the run ID to an output file named "run_id".
+    - If the run completes successfully, writes output entities to files.
+    - Logs all major steps and warnings for failures.
+    - Exits with code 1 if the run fails.
     """
-    if not str_list:
-        return {}
-    result = {}
-    for param in str_list:
-        if "=" not in param:
-            raise ValueError(f"Invalid property format (expected key=value): {param}")
-        key, value = param.split("=", 1)
-        result[key] = value
-    return result
+    LOGGER.info(f"Executing {exec_entity.ENTITY_TYPE} task {exec_kwargs['action']}")
+    run = exec_entity.run(**exec_kwargs)
+
+    _poller(run)
+
+    # Write run_id to output file
+    _write_run_id(run)
+
+    # Process outputs
+    _check_complete(run)
+    LOGGER.info("Step completed: " + run.status.state)
+
+    _export_outputs(run)
+    LOGGER.info("Done.")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -358,11 +335,7 @@ def parser() -> argparse.ArgumentParser:
     parser.add_argument("--workflow", type=str, help="Workflow name", required=False, default=None)
     parser.add_argument("--workflow_id", type=str, help="Workflow ID", required=False, default=None)
     parser.add_argument("--action", type=str, help="Action type", required=False, default=None)
-    parser.add_argument("--jsonprops", type=str, help="Function kwargs (as JSON)", required=False)
-    parser.add_argument("--parameters", type=str, help="Function parameters", required=False)
-    parser.add_argument("-ie", action="append", type=str, help="Input entity property", required=False)
-    parser.add_argument("-iv", action="append", type=str, help="Input parameters property", required=False)
-    parser.add_argument("-oe", action="append", type=str, help="Output entity property", required=False)
+    parser.add_argument("--execkwargs", type=str, help="Function kwargs (as JSON)", required=False)
     return parser
 
 
