@@ -20,15 +20,9 @@ if typing.TYPE_CHECKING:
     from digitalhub.entities.run._base.entity import Run
 
 
-# default KFP artifacts and output (ui metadata, metrics etc.)
-# directories to /tmp to allow running with security context
-KFPMETA_DIR = "/tmp"
-KFP_ARTIFACTS_DIR = "/tmp"
-
-
 def _write_output(key: str, value: str) -> None:
     """
-    Write an output value to a file in the KFP artifacts directory.
+    Write an output value to a file in the Hera artifacts directory.
 
     Parameters
     ----------
@@ -46,10 +40,15 @@ def _write_output(key: str, value: str) -> None:
     Prevents path traversal attacks by validating the output path.
     Logs warnings if writing fails or if the path is unsafe.
     """
-    path = os.path.join(KFP_ARTIFACTS_DIR, key)
-    if not _is_safe_path(KFP_ARTIFACTS_DIR, path):
+    base = "/tmp"
+    path = os.path.join(base, key)
+
+    # Check if the path is safe
+    if not base == os.path.commonpath((base, os.path.abspath(path))):
         LOGGER.info(f"Path traversal is not allowed, ignoring: {path} / {key}")
         return
+
+    # Write the file
     path = os.path.abspath(path)
     LOGGER.info(f"Writing artifact output: {path}, value: {value}")
     try:
@@ -58,51 +57,6 @@ def _write_output(key: str, value: str) -> None:
         LOGGER.info(f"File written: {path}, size: {os.stat(path).st_size}")
     except Exception as e:
         LOGGER.info(f"Failed to write output file {path}: {repr(e)}")
-
-
-def _is_safe_path(
-    base: str,
-    filepath: str,
-    is_symlink: bool = False,
-) -> bool:
-    """
-    Check if the given filepath is within the base directory to prevent path traversal.
-
-    Parameters
-    ----------
-    base : str
-        The base directory.
-    filepath : str
-        The file path to check.
-    is_symlink : bool, optional
-        Whether to resolve symlinks (default is False).
-
-    Returns
-    -------
-    bool
-        True if the filepath is safe, False otherwise.
-    """
-    resolved_filepath = os.path.abspath(filepath) if not is_symlink else os.path.realpath(filepath)
-    return base == os.path.commonpath((base, resolved_filepath))
-
-
-def _check_errors(run: Run) -> None:
-    """
-    Check if a run has failed.
-
-    Parameters
-    ----------
-    run : Run
-        The run to check.
-
-    Returns
-    -------
-    None
-    """
-    if run.status.state == State.ERROR.value:
-        LOGGER.info("Step failed: " + run.status.state)
-        exit(1)
-    LOGGER.info("Step ended with state: " + run.status.state)
 
 
 def _export_outputs(run: Run) -> None:
@@ -117,11 +71,6 @@ def _export_outputs(run: Run) -> None:
     Returns
     -------
     None
-
-    Notes
-    -----
-    Prevents path traversal attacks by validating the output path.
-    Logs warnings if writing fails or if the path is unsafe.
     """
     try:
         _write_output("run_id", run.id)
@@ -174,25 +123,6 @@ def _parse_exec_entity(entity_key: str) -> ExecutableEntity:
     exit(1)
 
 
-def _parse_exec_kwargs(kwargs: str) -> dict:
-    """
-    Parse the execution keyword arguments from command-line arguments.
-
-    Parameters
-    ----------
-    kwargs : str
-        The execution keyword arguments as a JSON string.
-
-    Returns
-    -------
-    dict
-        Dictionary of keyword arguments to be passed to the executable entity.
-    """
-    exec_kwargs = json.loads(kwargs)
-    exec_kwargs["wait"] = True
-    return exec_kwargs
-
-
 def execute_step(
     exec_entity: ExecutableEntity,
     exec_kwargs: dict,
@@ -218,7 +148,11 @@ def execute_step(
     run = exec_entity.run(**exec_kwargs)
 
     # Check for errors
-    _check_errors(run)
+    if run.status.state == State.ERROR.value:
+        LOGGER.info("Step failed: " + run.status.state)
+        exit(1)
+
+    LOGGER.info("Step ended with state: " + run.status.state)
 
     # Write run_id and outputs
     _export_outputs(run)
@@ -235,7 +169,7 @@ def main() -> None:
 
     args = parser.parse_args()
     exec_entity = _parse_exec_entity(args.entity)
-    exec_kwargs = _parse_exec_kwargs(args.kwargs)
+    exec_kwargs = json.loads(args.kwargs)
     execute_step(exec_entity, exec_kwargs)
 
 
