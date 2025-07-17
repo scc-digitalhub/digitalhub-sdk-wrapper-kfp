@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.source=https://github.com/scc-digitalhub/digitalh
 
 ARG ver_sdk=0.13.0b0
 ARG ver_python=0.12.0
-ARG ver_container=0.12.0
+ARG ver_container=0.13.0b0
 ARG ver_modelserve=0.12.0
 ARG ver_dbt=0.13.0b0
 ARG ver_kfp=0.13.0b0
