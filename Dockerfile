@@ -12,6 +12,7 @@ ARG ver_container=0.12.0
 ARG ver_modelserve=0.12.0
 ARG ver_dbt=0.12.0
 ARG ver_kfp=0.12.0
+ARG ver_hera=0.12.0
 
 # Set working dir
 WORKDIR /app/
@@ -22,6 +23,7 @@ RUN python -m pip install "digitalhub[pandas]==${ver_sdk}" \
     python -m pip install "digitalhub-runtime-python==${ver_python}" \
                           "digitalhub-runtime-container==${ver_container}"  \
                           "digitalhub-runtime-modelserve==${ver_modelserve}" \
+                          "digitalhub-runtime-hera==${ver_hera}" \
                           "digitalhub-runtime-dbt[local]==${ver_dbt}" --no-deps && \
     python -m pip install "pydantic>=2"
 
