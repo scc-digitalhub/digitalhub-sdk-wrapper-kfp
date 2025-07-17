@@ -9,7 +9,8 @@ import json
 import os
 import typing
 
-import digitalhub as dh
+from digitalhub.entities.function.crud import get_function
+from digitalhub.entities.workflow.crud import get_workflow
 from digitalhub.entities._base.entity.entity import Entity
 from digitalhub.entities._commons.enums import EntityTypes, State
 from digitalhub.entities._commons.utils import parse_entity_key
@@ -116,9 +117,9 @@ def _parse_exec_entity(entity_key: str) -> ExecutableEntity:
     _, entity_type, _, name, uuid = parse_entity_key(entity_key)
     LOGGER.info(f"Getting {entity_type} {name}:{uuid}.")
     if entity_type == EntityTypes.FUNCTION.value:
-        return dh.get_function(entity_key)
+        return get_function(entity_key)
     elif entity_type == EntityTypes.WORKFLOW.value:
-        return dh.get_workflow(entity_key)
+        return get_workflow(entity_key)
     LOGGER.info("Step failed: no workflow or function defined")
     exit(1)
 
