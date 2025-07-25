@@ -12,7 +12,7 @@ ARG ver_container=0.13.0b0
 ARG ver_modelserve=0.13.0b0
 ARG ver_dbt=0.13.0b0
 ARG ver_kfp=0.13.0b0
-ARG ver_hera=0.13.0b3
+ARG ver_hera=0.13.0b4
 
 # Set working dir
 WORKDIR /app/
