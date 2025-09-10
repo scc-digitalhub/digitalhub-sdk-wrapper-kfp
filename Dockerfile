@@ -26,7 +26,7 @@ RUN python -m pip install "digitalhub[pandas]==${ver_sdk}" \
                           "digitalhub-runtime-modelserve==${ver_modelserve}" \
                           "digitalhub-runtime-hera==${ver_hera}" \
                           "digitalhub-runtime-flower==${ver_flower}" \
-                          "digitalhub-runtime-dbt[local]==${ver_dbt}" --no-deps && \
+                          "digitalhub-runtime-dbt==${ver_dbt}" --no-deps && \
     python -m pip install "pydantic>=2"
 
 # Copy wrapper and set entry point
