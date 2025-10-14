@@ -32,10 +32,6 @@ def _write_output(key: str, value: str) -> None:
     value : str
         The value to write to the file.
 
-    Returns
-    -------
-    None
-
     Notes
     -----
     Prevents path traversal attacks by validating the output path.
@@ -68,10 +64,6 @@ def _export_outputs(run: Run) -> None:
     ----------
     run : Run
         The run to export.
-
-    Returns
-    -------
-    None
     """
     try:
         _write_output("run_id", run.id)
@@ -139,10 +131,6 @@ def execute_step(
         The executable entity to run (function or workflow).
     exec_kwargs : dict
         The keyword arguments to pass to the entity's run method.
-
-    Returns
-    -------
-    None
     """
     # Run
     LOGGER.info(f"Executing {exec_entity.ENTITY_TYPE} {exec_entity.name}:{exec_entity.id}")
