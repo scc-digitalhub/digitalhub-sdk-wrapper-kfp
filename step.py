@@ -9,15 +9,16 @@ import json
 import os
 import typing
 
-from digitalhub.entities.function.crud import get_function
-from digitalhub.entities.workflow.crud import get_workflow
 from digitalhub.entities._base.entity.entity import Entity
-from digitalhub.entities._commons.enums import EntityTypes, State
-from digitalhub.entities._commons.utils import parse_entity_key
+from digitalhub.entities._commons.enums import Relationship, State
+from digitalhub.entities.function.crud import get_function
+from digitalhub.entities.run.crud import get_run
+from digitalhub.factory.entity import entity_factory
+from digitalhub.runtimes.enums import RuntimeEnvVar
 from digitalhub.utils.logger import LOGGER
 
 if typing.TYPE_CHECKING:
-    from digitalhub.entities._base.executable.entity import ExecutableEntity
+    from digitalhub.entities.function._base.entity import Function
     from digitalhub.entities.run._base.entity import Run
 
 
@@ -92,7 +93,7 @@ def _export_outputs(run: Run) -> None:
         _write_output(key, value)
 
 
-def _parse_exec_entity(entity_key: str) -> ExecutableEntity:
+def _parse_exec_entity(entity_key: str) -> Function:
     """
     Parse the executable entity from command-line arguments.
 
@@ -103,21 +104,19 @@ def _parse_exec_entity(entity_key: str) -> ExecutableEntity:
 
     Returns
     -------
-    ExecutableEntity
-        The parsed executable entity.
+    Function
+        The executable entity (function).
     """
-    _, entity_type, _, name, uuid = parse_entity_key(entity_key)
-    LOGGER.info(f"Getting {entity_type} {name}:{uuid}.")
-    if entity_type == EntityTypes.FUNCTION.value:
+    LOGGER.info(f"Getting function {entity_key}.")
+    try:
         return get_function(entity_key)
-    elif entity_type == EntityTypes.WORKFLOW.value:
-        return get_workflow(entity_key)
-    LOGGER.info("Step failed: no workflow or function defined")
-    exit(1)
+    except Exception as e:
+        LOGGER.info(f"Step failed: Error getting function: {str(e)}")
+        exit(1)
 
 
 def execute_step(
-    exec_entity: ExecutableEntity,
+    func: Function,
     exec_kwargs: dict,
 ) -> None:
     """
@@ -127,14 +126,43 @@ def execute_step(
 
     Parameters
     ----------
-    exec_entity : ExecutableEntity
-        The executable entity to run (function or workflow).
+    exec_entity : Function
+        The executable entity to run (function).
     exec_kwargs : dict
         The keyword arguments to pass to the entity's run method.
     """
     # Run
-    LOGGER.info(f"Executing {exec_entity.ENTITY_TYPE} {exec_entity.name}:{exec_entity.id}")
-    run = exec_entity.run(**exec_kwargs)
+    LOGGER.info(f"Executing {func.ENTITY_TYPE} {func.name}:{func.id}")
+
+    # Get workflow run id from run env var
+    workflow_run_id = os.getenv(RuntimeEnvVar.RUN_ID.value)
+    project = os.getenv(RuntimeEnvVar.PROJECT.value)
+    workflow_run_key = get_run(workflow_run_id, project=project).key
+
+    # Get task and run kind
+    action = exec_kwargs.pop("action", None)
+    if action is None:
+        LOGGER.info("Step failed: action argument is required.")
+        exit(1)
+
+    task_kind = entity_factory.get_task_kind_from_action(func.kind, action)
+    run_kind = entity_factory.get_run_kind_from_action(func.kind, action)
+
+    # Create or update new task
+    task = func._get_or_create_task(task_kind)
+
+    # Remove execution flags
+    exec_kwargs.pop("local_execution", None)
+    exec_kwargs.pop("wait", None)
+
+    # Create run from task
+    run = task.run(run_kind, save=False, local_execution=False, **exec_kwargs)
+
+    # Set as run's parent and workflow relationship
+    run.add_relationship(Relationship.STEP_OF.value, workflow_run_key)
+    run.add_relationship(Relationship.RUN_OF.value, func.key)
+    run.save()
+    run.wait()
 
     # Check for errors
     if run.status.state == State.ERROR.value:
@@ -153,8 +181,18 @@ def main() -> None:
     Main function.
     """
     parser = argparse.ArgumentParser(description="Step executor")
-    parser.add_argument("--entity", type=str, help="Executable entity key", required=True)
-    parser.add_argument("--kwargs", type=str, help="Execution keyword arguments", required=True)
+    parser.add_argument(
+        "--entity",
+        type=str,
+        help="Executable entity key",
+        required=True,
+    )
+    parser.add_argument(
+        "--kwargs",
+        type=str,
+        help="Execution keyword arguments",
+        required=True,
+    )
 
     args = parser.parse_args()
     exec_entity = _parse_exec_entity(args.entity)
