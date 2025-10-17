@@ -137,7 +137,8 @@ def execute_step(
     # Get workflow run id from run env var
     workflow_run_id = os.getenv(RuntimeEnvVar.RUN_ID.value)
     project = os.getenv(RuntimeEnvVar.PROJECT.value)
-    workflow_run_key = get_run(workflow_run_id, project=project).key
+    workflow_run = get_run(workflow_run_id, project=project)
+    workflow_run_key = workflow_run.key + ":" + workflow_run.id
 
     # Get task and run kind
     action = exec_kwargs.pop("action", None)
