@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import typing
+import time
 
 from digitalhub.entities._base.entity.entity import Entity
 from digitalhub.entities._commons.enums import Relationship, State
@@ -115,6 +116,45 @@ def _parse_exec_entity(entity_key: str) -> Function:
         exit(1)
 
 
+def _wait_for_run(run: Run) -> None:
+    """
+    Wait for a run to complete with retry logic.
+
+    Attempts to wait for the run up to 3 times with increasing delays:
+    - First attempt: immediate
+    - Second attempt: after 60 seconds
+    - Third attempt: after 120 seconds
+
+    Parameters
+    ----------
+    run : Run
+        The run to wait for.
+    """
+    max_attempts = 3
+    wait_delays = [0, 60, 120]
+
+    for attempt in range(max_attempts):
+
+        # Wait for the run to complete
+        if attempt > 0:
+            delay = wait_delays[attempt]
+            LOGGER.info(f"Waiting {delay} seconds before retry attempt {attempt + 1}/{max_attempts}")
+            time.sleep(delay)
+
+        # Attempt to wait for the run
+        try:
+            LOGGER.info("Waiting for run to complete")
+            run.wait()
+            break
+
+        # If an exception occurs, log it and retry if attempts remain
+        except Exception as e:
+            LOGGER.info(f"Attempt {attempt + 1}/{max_attempts} failed: {repr(e)}")
+            if attempt == max_attempts - 1:
+                LOGGER.info("All retry attempts exhausted")
+                raise e
+
+
 def execute_step(
     func: Function,
     exec_kwargs: dict,
@@ -163,7 +203,9 @@ def execute_step(
     run.add_relationship(Relationship.STEP_OF.value, workflow_run_key)
     run.add_relationship(Relationship.RUN_OF.value, func.key)
     run.save()
-    run.wait()
+
+    # Wait for completion with retries
+    _wait_for_run(run)
 
     # Check for errors
     if run.status.state == State.ERROR.value:
