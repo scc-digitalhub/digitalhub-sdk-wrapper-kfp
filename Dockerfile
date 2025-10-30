@@ -12,7 +12,7 @@ ARG ver_container=0.14.1b0
 ARG ver_modelserve=0.14.0
 ARG ver_dbt=0.14.0
 ARG ver_kfp=0.14.1
-ARG ver_hera=0.14.0
+ARG ver_hera=0.14.1b0
 ARG ver_flower=0.14.0
 
 # Set working dir
